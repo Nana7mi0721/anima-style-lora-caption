@@ -1,0 +1,209 @@
+{
+  "parent_to_children": {
+    "animal ears": [
+      "cat ears",
+      "fox ears",
+      "wolf ears",
+      "dog ears",
+      "rabbit ears",
+      "fake animal ears",
+      "mouse ears",
+      "raccoon ears",
+      "bear ears",
+      "tiger ears",
+      "lion ears",
+      "horse ears",
+      "cow ears",
+      "sheep ears",
+      "monkey ears",
+      "squirrel ears",
+      "deer ears",
+      "bat ears"
+    ],
+    "swimsuit": [
+      "school swimsuit",
+      "competition swimsuit",
+      "one-piece swimsuit",
+      "frilled bikini",
+      "bikini",
+      "string bikini",
+      "striped bikini"
+    ],
+    "bikini": [
+      "string bikini",
+      "frilled bikini",
+      "side-tie bikini bottom",
+      "bikini top only",
+      "striped bikini"
+    ],
+    "clothes": [
+      "dress",
+      "shirt",
+      "skirt",
+      "jacket",
+      "coat",
+      "sweater",
+      "hoodie",
+      "school uniform",
+      "serafuku",
+      "swimsuit",
+      "bikini",
+      "pajamas",
+      "maid"
+    ],
+    "legwear": [
+      "thighhighs",
+      "pantyhose",
+      "socks",
+      "kneehighs",
+      "asymmetrical legwear",
+      "striped thighhighs",
+      "black thighhighs",
+      "white thighhighs"
+    ],
+    "footwear": [
+      "boots",
+      "shoes",
+      "sandals",
+      "loafers",
+      "sneakers",
+      "high heels"
+    ],
+    "headwear": [
+      "witch hat",
+      "santa hat",
+      "hat",
+      "cap",
+      "crown",
+      "tiara",
+      "maid headdress",
+      "hairband",
+      "beret",
+      "sun hat"
+    ],
+    "hair ornament": [
+      "hair bow",
+      "hair flower",
+      "hairclip",
+      "x hair ornament",
+      "hair ribbon",
+      "hair scrunchie",
+      "lace hairband",
+      "hair bobbles",
+      "head wreath"
+    ],
+    "undergarment": [
+      "panties",
+      "bra",
+      "underwear",
+      "boxers"
+    ],
+    "bow": [
+      "hair bow",
+      "red bow",
+      "blue bow",
+      "black bow",
+      "white bow",
+      "green bow",
+      "yellow bow",
+      "pink bow"
+    ],
+    "flower": [
+      "hair flower"
+    ],
+    "jewelry": [
+      "earrings",
+      "necklace",
+      "bracelet",
+      "ring",
+      "choker",
+      "pendant"
+    ],
+    "holding": [
+      "holding book",
+      "holding pen",
+      "holding lollipop",
+      "holding phone",
+      "holding weapon"
+    ],
+    "collar": [
+      "black collar",
+      "white collar",
+      "blue collar",
+      "wing collar",
+      "white sailor collar",
+      "black sailor collar",
+      "blue sailor collar",
+      "red sailor collar",
+      "sailor collar"
+    ],
+    "tail": [
+      "demon tail",
+      "fox tail",
+      "wolf tail",
+      "cat tail",
+      "rabbit tail",
+      "dog tail"
+    ],
+    "wings": [
+      "demon wings",
+      "black wings",
+      "angel wings",
+      "bat wings",
+      "fairy wings",
+      "white wings",
+      "feathered wings"
+    ],
+    "horns": [
+      "demon horns",
+      "black horns",
+      "oni horns",
+      "goat horns"
+    ],
+    "breasts": [
+      "flat chest",
+      "small breasts",
+      "medium breasts",
+      "large breasts",
+      "huge breasts",
+      "gigantic breasts"
+    ]
+  },
+  "generic_drop_on_modifier": [
+    "clothes",
+    "garment",
+    "undergarment",
+    "footwear",
+    "headwear",
+    "jewelry",
+    "hat",
+    "shoes",
+    "sandals",
+    "legwear",
+    "armband",
+    "swimsuit",
+    "bikini",
+    "dress",
+    "shirt",
+    "skirt",
+    "jacket",
+    "panties",
+    "thighhighs",
+    "bra",
+    "bow",
+    "choker",
+    "hairband",
+    "sailor collar",
+    "necktie",
+    "ribbon",
+    "gloves",
+    "socks",
+    "boots",
+    "underwear",
+    "shorts",
+    "collar",
+    "neckerchief",
+    "hair",
+    "eyes"
+  ]
+}

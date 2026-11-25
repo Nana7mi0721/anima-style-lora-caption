@@ -1,0 +1,26 @@
+# Verified Danbooru tags that begin with a negative prefix (no/without/not).
+# Exempted from negative-token deletion.
+no panties
+no bra
+no humans
+no pupils
+no shoes
+no socks
+no headwear
+no shirt
+no pants
+no eyes
+no mouth
+no nose
+no hands
+no ears
+no footwear
+no legwear
+no lineart
+no wings
+no testicles
+no navel
+no nipples
+no bikini
+no hat
+no gloves

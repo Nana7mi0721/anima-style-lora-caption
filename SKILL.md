@@ -1,100 +1,90 @@
 ---
 name: anima-style-lora-caption
-description: 指导 agent 为 Anima LoRA 数据集执行打标/洗标工作：探测环境与信息源、下采样、生成 tag 动作表、派发看图子代理做结构化槽位标注、解析合并、规范化标签、校验并写回。产出单行 danbooru 标签串 caption。用户要求"洗标/打标/给数据集写 caption/整理标签/清洗 tag"时使用。标签该写什么内容见参考文档 Anima_style_LoRA_打标指南.md。
+description: 指导 agent 为 Anima LoRA 数据集执行打标/洗标：探测环境与代理、下采样、生成 tag 动作表与缺口矩阵、视觉前角色名录消歧、派发看图子代理输出严格 JSON、解析合并、两道校验并原子写回。产出单行空格形 danbooru 标签串与 caption_summary.json。用户要求"洗标/打标/给数据集写 caption/整理标签/清洗 tag"时使用。
 ---
 
 # SKILL：Anima LoRA 数据集打标/洗标执行器
 
-本 skill 指导 agent **实际执行**一次打标/洗标任务——从发现数据集到写回校验通过的 caption。
-**「标签写什么内容」（格式、槽位、该删该留、规范化对照）的权威定义在参考文档 `references/Anima_style_LoRA_打标指南.md`**；本 skill 负责「怎么把这件事做完」。
+本 skill 编排端到端打标/洗标执行；规则 SSOT 在 `rules/`，执行细则在 `assets/`，标签内容规范按需查阅 `references/`。
 
-> **不预设任何本地路径、硬件或工具链。** 所有路径、脚本位置、可用模型通道都在第 0 步探测或向用户确认。
+> **不预设本地路径、工具名、硬件或网络环境。** 第 0 步先探测确认再开工。
 
 ## §0 环境探测（动手前必须完成）
 
-| 项 | 获取方式 | 影响 |
+| 项 | 探测内容 | 影响 |
 |---|---|---|
-| **数据集位置与结构** | 扫描用户给的目录：子文件夹划分、图片数、是否已有同名 .txt | 决定分组与派发批次 |
-| **是否已有初稿 caption** | 同名 .txt 是否存在？看 2~3 个判断是自然语言散文还是标签 | 决定是「校验补全」还是「从零标注」 |
-| **是否有 booru 权威标签** | 图片元数据文件/重命名对照表/manifest/rename_map | 决定三源优先级（A>B>C 还是 B 为骨） |
-| **图片体积** | 抽样看文件大小（尤其 >8MB 的） | 决定是否必须下采样 |
-| **可用的看图通道** | 当前 agent 是否能用 Read 读图；有哪些子代理模型可用 | 决定派发策略（见 §5） |
-| **Python 环境** | 有哪个 python、是否有 PIL | 下采样与裁剪脚本能否跑 |
-| **输出目录约定** | 问用户中间产物放哪、备份放哪 | 阶段落盘位置 |
-| **触发词** | 从现有 caption 首位提取，或问用户 | 最终 caption 的首位锚点 |
+| **数据集与非图文件** | 目录划分、图片数、体积（>8MB 需下采样）、是否混有 `.zip`/`.mp4`/`.psd` | 预清理与分批 |
+| **初稿与权威源** | 同名 `.txt`（散文/标签）及 metadata/rename_map/CSV 等 booru 权威源 | 三源（A>B>C）/两源（B/C）/纯视觉（B） |
+| **工具名与子代理模式** | 探测 `<READ_IMAGE_TOOL>`（如 `read_image`/`Read`）、`<WRITE_TOOL>`（如 `write_file`/`Write`），及是否支持 teammate 复用/轮转（单代理上限 5~8 张） | 提示词占位替换与轮转策略 |
+| **网络与代理探针** | 探测 `danbooru.donmai.us`、`animadex.net` 连通性；代理 `--proxy` 及 `urllib` vs `curl -x`（`--use-curl`）可用性 | Stage 1.5b 与 Gate 2 在线校验 |
+| **Python / 输出 / 触发词** | Python ≥3.10 + `Pillow`；`<WORK>` 与 `<BACKUP_DIR>` 路径；首位 `@trigger`（禁止从文件名反推） | 脚本执行与落盘锚点 |
 
-探测结果要用一句话向用户复述确认后再开工。
+探测结果用一句话向用户复述确认后再开工。
 
-## §1 资产文件（按需读取）
+## §1 资产与脚本索引（按需渐进加载）
 
-| 文件 | 触发时机 |
+> **直接运行 `scripts/*.py` CLI**，严禁每次从零手写下采样/解析/合并/校验样板脚本。
+
+| 路径 | 职责与加载时机 |
 |---|---|
-| `references/Anima_style_LoRA_打标指南.md` | **标签内容的权威定义**：格式硬约束、槽位结构、目标类型差异、专项条款、检查清单。写任何标签前必读 |
-| `assets/workflow.md` | **执行流程详规**：下采样、派发、提示词模板、裁切纪律、失败台账、校验写回 |
-| `assets/normalization.md` | 标签规范化对照表（别名/废弃/否定式/描写词白名单）与词典校验方法 |
+| `rules/` | **SSOT 规则**（`vision_fix.json`、`whitelist.txt`、`parent_fold.json`、`banned.json`、`neg_keep.txt`、`slots.json`、`prompt_templates.json`）——脚本自动加载，勿手抄副本 |
+| `scripts/` | **CLI 工具链**（`common.py`、`make_thumbs.py`、`build_tag_table.py`、`lookup_chars.py`、`parse_descriptions.py`、`merge_captions.py`、`validate_captions.py`、`apply_captions.py`） |
+| [assets/workflow.md](assets/workflow.md) | **执行详规**：提示词模板（严格 JSON）、缺口预设、轮转纪律、全部脚本 CLI 用法 |
+| [assets/normalization.md](assets/normalization.md) | **规范化与校验指南**：`wash_rules.json` 扩展语义、否定式防护、3 类冲突豁免、3 态校验 |
+| [references/Anima_style_LoRA_打标指南.md](references/Anima_style_LoRA_打标指南.md) | **核心规范（按需）**：格式硬约束、7 槽位结构、三源优先级、专项条款（写/审标签前先读） |
+| [references/target_types.md](references/target_types.md) | **目标类型细则（按需）**：角色/画师/服装/物体/场景差异与 WD14 标定（仅按需读取） |
+| [references/troubleshooting.md](references/troubleshooting.md) | **排障手册（按需）**：异常矩阵、风格-内容纠缠、Trainer 源码细节（仅排错时读取） |
 
 ## §2 两条铁律
 
-1. **主代理永不读图**。读图会让图片进入主上下文、打断长会话。看图一律交子代理，主代理只处理文本与文件。
-2. **写一张落一张**。要求子代理每处理完一张立刻写盘。会话中断时靠这条只丢最后几张，而不是整批。
+1. **主代理永不读图**：看图一律交子代理，主代理只处理文本、JSON 与脚本，防图片撑爆上下文。
+2. **写一张落一张**：子代理每看完一张立刻用 `<WRITE_TOOL>` 写入 `descriptions/<stem>.json`。
 
-## §3 执行流程（七阶段）
+## §3 升级版执行流程
 
+```text
+阶段 -1   归档初稿 + 轻量预检（隔离非图文件；近重复先查 parent_id/pixiv_id/Jaccard；定水印策略）
+阶段  1   下采样 → 缩略图（scripts/make_thumbs.py：长边 ≤1536 / ≤2MB）
+阶段 1.5  动作表 + 缺口矩阵 review_todo.csv + char_freq.csv + per_image.json 追加（scripts/build_tag_table.py）
+阶段 1.5b 视觉前角色名录消歧（scripts/lookup_chars.py + Pixiv/FANBOX 标题 → 用户签字 → 注入阶段 2）
+阶段 2.0  1~2 张缩略图冒烟探针（验证看图通道、审查阈值与严格 JSON 可解析性）
+阶段  2   缺口驱动看图派发（动态 SFW/NSFW/任务预设，严格 JSON 落盘，teammate 每 5~8 张轮转重建）
+阶段 2.5  解析（scripts/parse_descriptions.py）→ supplement.json + vision_failed.txt + vision_review.txt
+阶段  3   合并（scripts/merge_captions.py：三源/两源/纯视觉 + rules/ + overrides.json + 可选 --trim-mode auto）
+阶段  4   校验（scripts/validate_captions.py：Gate 1 离线含不含触发词计数与 3 豁免 + Gate 2 在线 3 态 & SQLite 缓存）
+阶段  5   快照备份 → 原子写回 → 落盘复检 → caption_summary.json（scripts/apply_captions.py）
 ```
-阶段 -1  归档现有初稿（若有）——写回会覆盖同名文件，必须先留档
-阶段  1  下采样 → 缩略图（长边 ≤1536 / ≤2MB）
-阶段 1.5 生成 tag 动作表（每个出现过的 tag 一条动作）
-阶段  2  派子代理看图 → 结构化槽位标注（子代理自行落盘）
-阶段 2.5 解析自由格式 → 结构化 JSON + 失败台账 + 人工复核清单
-阶段  3  合并：三源结合 + 归一化 + 槽位排序
-阶段  4  校验：格式闸门 + 标签有效性闸门
-阶段  5  备份 → 写回 → 抽查
-```
-
-各阶段的详细操作、脚本契约与判定标准见 `assets/workflow.md`。
-
-**阶段 -1 不能省**：初稿与最终 caption 通常**同名**（都是 `NNNN.txt`），写回会覆盖它们。初稿是原始打标数据，覆盖后不可恢复。
 
 ## §4 按任务形态分流
 
-先判断属于哪种，三种的合并逻辑完全不同：
-
 | 形态 | 特征 | 合并策略 |
 |---|---|---|
-| **三源**（A/B/C） | 有 booru 权威标签 + 图 + 自动打标初稿 | A 是基准不得推翻；B 补 A 空缺；C 只做校验 |
-| **两源**（B/C） | 无 booru 源，有初稿 | B 为骨（视觉产出即主体）；C 交叉核对，与 B 冲突判 C 幻觉 |
-| **纯视觉**（B） | 无 booru 源、无初稿 | 视觉产出直接构成 caption；无依据不写 |
+| **三源（A/B/C）** | 有 booru 权威标签 + 图 + 初稿 | A 为基准不得推翻；B 补空缺；C 仅交叉校验 |
+| **两源（B/C）** | 无 booru 源，有自动打标初稿 | B 为骨（视觉即主体）；C 交叉核对，冲突判 C 幻觉 |
+| **纯视觉（B）** | 无 booru 源、无初稿 | 视觉产出直接构成 caption；无依据不写 |
 
-判断依据与优先级细则见参考文档「标签来源与三源优先级」章。
+## §5 派发子代理要点
 
-## §5 派发子代理（最容易失败的一环）
-
-完整提示词模板、裁切纪律、并发与分组规则见 `assets/workflow.md` §2~§4。核心要点：
-
-- **提示词必须是「结构化槽位填空」，绝不能是开放式描述**。字段名列表把任务锚定成「填表」，开放式描述会触发内容审核拒绝。这是能否跑完的决定性因素。
-- **必答字段锁定在信息源覆盖最差的地方**：人数、关系、构图、性描写细节。这些没有可靠的文本兜底。
-- **失败只记台账，不兜底不重试**。不要用「子代理返回空就退回纯文本标注」的做法——那会把失败藏起来。
-- **整批拒答 → 缩小派发粒度到 1 图 1 代理**。拒答往往是「批次级」的，缩粒度比改措辞有效得多。
-- **仍硬拒 → 换子代理模型/渠道**。
-- **渠道级故障的判别**：用「纯文本载荷能通、图片载荷被拒」的探针二分，确认是渠道内容策略问题而非提示词问题。
+- **结构化填表 + 严格 JSON**：槽位清单锚定填表，落盘 `descriptions/<stem>.json`（`string[]` 值 + `"note"` 字符串），避免开放式描述误拒与逗号/颜文字切分损坏。
+- **缺口驱动与分级隔离**：按 `review_todo.csv` 选精简/完整预设；仅 NSFW 挂载 `ACTS`/`FLUIDS`；SFW/NSFW 与近重复对隔离。
+- **轮转与抗拒答**：DSH teammate 每 **5~8 张轮转重建**；整批拒答缩至 **1 图 1 代理**，仍硬拒换模型/渠道或做四段探针二分。
+- **失败只记台账**：空返回/拒答写 `vision_failed.txt`，严禁静默退回文本兜底。
 
 ## §6 红线（任何时候不得违反）
 
-1. **不假设用户环境**：路径、图片体积、可用模型通道一律探测或询问
-2. **不写否定式标签**（`no cum` / `tongue not out`）——这是反向标签，比漏标更糟
-3. **不用文件名反推标签**——实测大量数据集文件名标签残缺
-4. **不擅自给角色定名**——反复出现的客串角色先出频次表交用户裁决
-5. **不自动兜底降级**——失败记台账，由用户裁决是否补跑
-6. **不改动原图**；写回前必须快照备份
-7. **写回前必须跑完两道校验**（格式 + 标签有效性），不得跳过
-8. **标签内容的取舍以参考文档为准**，本 skill 不重新定义「该写什么」
+1. **不假设环境**：路径、工具名、通道、代理一律先探测确认。
+2. **不写自造否定式**（`no cum`/`tongue not out` 零容忍）；合法 `no *` 标签由 `rules/neg_keep.txt` 与词典放行。
+3. **不用文件名反推标签**；**不擅自给客串角色定名**（`lookup_chars.py` 名录交用户裁决）。
+4. **不自动兜底降级**：失败只记台账。
+5. **不将 `UNVERIFIED` 降级为 `INVALID`/`ABSENT`**：网络失败未验证的标签绝不能当作不存在而删掉。
+6. **不截断 `per_image.json`**：增量入库只能追加/更新，不得丢失历史批次。
+7. **标签数口径一律不含 `@trigger`**：20~45 区间及 `--max-tags` 均排除首位触发词。
+8. **不改动原图**；写回前必须快照备份初稿与元数据，并跑完 Gate 1 + Gate 2（未验证项未显式放行前阻断写回）。
 
 ## §7 完成后交付
 
-- 建了哪些文件（完整路径）
-- 处理统计：张数、失败清单（若有）、每张标签数（均值/中位/极值）
-- 校验结果：格式问题数、无效标签数、需人工复核项
-- 发现的**数据集层面问题**：重复图、多样性缺口、caption 系统性缺陷
-- 待用户裁决事项（如有）
-
-> 打标完成后要训练时，转 `anima-lora-config` skill 生成训练配置。
+- 产出路径（`<WORK>`、快照备份目录、`caption_summary.json`）
+- 处理统计（总张数、`vision_failed.txt`、不含 `@trigger` 的标签数均值/中位/极值及裁剪明细）
+- 校验报告（Gate 1 问题数、Gate 2 `VALID`/`INVALID`/`UNVERIFIED` 分布、`vision_review.txt`）
+- 数据集问题（近重复对、多样性缺口、待裁决事项）
+- **训练交接**：转 `anima-lora-config` skill，传入 `apply_captions.py` 产出的 `caption_summary.json`。

@@ -1,0 +1,99 @@
+{
+  "tool_placeholders": {
+    "read_image": "<READ_IMAGE_TOOL>",
+    "write_file": "<WRITE_TOOL>"
+  },
+  "field_definitions": {
+    "PEOPLE": "Count, gender, and relationship tags (e.g. 1girl, solo, 1boy, hetero, solo focus). Never mix solo and solo focus. Multiple views of the same character count as 1 person + multiple views.",
+    "CHARACTER": "Subject character identity from confirmed roster, or 'other: <brief traits>', or 'uncertain'.",
+    "HAIR": "Hair color, length, and hairstyle tags.",
+    "EYES": "Eye color, pupil/eyelid state, and gaze direction (looking at viewer, looking away -> looking to the side).",
+    "EXPRESSION": "Facial expression tags (smile, blush, open mouth, clenched teeth, etc.).",
+    "BODY": "Body traits, visible anatomy, skin/wet/sweat states.",
+    "CLOTHING": "Apparel, legwear, footwear, accessories, and clothing state (open jacket, skirt lift, etc.).",
+    "POSE": "Body posture, limb/hand placement, holding items, sitting/standing/lying/kneeling.",
+    "ACTS": "Sexual acts and positions in objective, clinical Danbooru terms (NSFW only).",
+    "FLUIDS": "Visible bodily fluids and placement (NSFW only; never write negative prefixes).",
+    "SCENE": "Location, background, furniture, and props (indoors, outdoors, simple background, couch, etc.).",
+    "LIGHTING": "Time of day, light source, shadow/tone descriptors (day, night, soft lighting, warm tone, etc.).",
+    "COMPOSITION": "Framing, camera angle, and focus tags (upper body, cowboy shot, full body, from above, close-up, etc.).",
+    "WATERMARK": "Visible watermark presence, color/type, or empty array.",
+    "TEXT": "Speech bubble, sound effects, logo, signature (do NOT use deprecated 'text' tags).",
+    "CORRECTIONS": "Discrepancies found between existing draft/A-source text and actual image pixels.",
+    "NOTE": "Free-text doubts, spatial notes, or ambiguities (never merged into final caption tags)."
+  },
+  "presets": {
+    "composition_only": {
+      "description": "Lightweight preset when A-source already covers character, appearance, and scene.",
+      "fields": ["PEOPLE", "POSE", "COMPOSITION", "WATERMARK", "NOTE"]
+    },
+    "people_and_composition": {
+      "description": "Gap-driven preset when appearance/scene are covered but people, pose, lighting, and framing need visual verification.",
+      "fields": ["PEOPLE", "POSE", "LIGHTING", "COMPOSITION", "WATERMARK", "TEXT", "NOTE"]
+    },
+    "full_sfw": {
+      "description": "Full SFW visual captioning template without explicit sexual slots.",
+      "fields": [
+        "PEOPLE", "CHARACTER", "HAIR", "EYES", "EXPRESSION",
+        "BODY", "CLOTHING", "POSE", "SCENE", "LIGHTING",
+        "COMPOSITION", "WATERMARK", "TEXT", "CORRECTIONS", "NOTE"
+      ]
+    },
+    "full_nsfw": {
+      "description": "Full NSFW visual captioning template with clinical ACTS and FLUIDS slots.",
+      "fields": [
+        "PEOPLE", "CHARACTER", "HAIR", "EYES", "EXPRESSION",
+        "BODY", "CLOTHING", "POSE", "ACTS", "FLUIDS",
+        "SCENE", "LIGHTING", "COMPOSITION", "WATERMARK", "TEXT",
+        "CORRECTIONS", "NOTE"
+      ]
+    }
+  },
+  "task_types": {
+    "style": {
+      "sfw": "full_sfw",
+      "nsfw": "full_nsfw",
+      "guidance": "Do NOT describe art style (no 'thick outlines', 'anime style', 'masterpiece'). Keep character tags if confirmed in roster; describe all content cleanly so style decouples from content."
+    },
+    "character": {
+      "sfw": "full_sfw",
+      "nsfw": "full_nsfw",
+      "guidance": "Do NOT emit the target character name tag (trigger carries identity). Describe variable clothing, pose, expression, and background accurately."
+    },
+    "clothing": {
+      "sfw": "full_sfw",
+      "nsfw": "full_nsfw",
+      "guidance": "Explicitly decouple character traits, garment details, pose, and environment."
+    },
+    "object": {
+      "sfw": "full_sfw",
+      "nsfw": "full_nsfw",
+      "guidance": "Capture object orientation and state (open, closed, folded, worn, in use)."
+    },
+    "scene": {
+      "sfw": "full_sfw",
+      "nsfw": "full_nsfw",
+      "guidance": "Emphasize camera distance, composition, spatial layout, time of day, and weather/lighting."
+    }
+  },
+  "prompt_template": "You are performing objective visual dataset annotation for LoRA training.\nUse <READ_IMAGE_TOOL> to inspect each downsampled image below:\n{image_list}\n\nRules:\n- Inspect every image directly with <READ_IMAGE_TOOL>; never use external vision tools.\n- Be objective, clinical, and concise. Do not omit, soften, or moralize visible content.\n- Output lowercase Danbooru-style English tags as JSON string arrays (empty [] if absent).\n- NEVER write negative phrases like 'no cum' or 'without clothes' when something is absent; leave the array empty [].\n- Put any uncertainty, prose explanation, or spatial notes ONLY inside \"note\".\n\nConfirmed character roster (if applicable):\n{char_roster}\n\nExisting metadata/drafts per image:\n{existing_context}\n\nRequired JSON fields for this batch ({preset}):\n{field_spec}\n\nFor each image, write a strict UTF-8 JSON file (no markdown fences) using <WRITE_TOOL> to:\n{output_paths}\n\nReply ONLY with one status line per image:\n<stem> ok\n<stem> refused: <reason>",
+  "strict_json_schema_example": {
+    "people": ["1girl", "solo"],
+    "character": [],
+    "hair": ["blonde hair", "long hair"],
+    "eyes": ["blue eyes", "looking at viewer"],
+    "expression": ["smile", "blush"],
+    "body": [],
+    "clothing": ["serafuku", "pleated skirt"],
+    "pose": ["standing", "hand on own hip"],
+    "acts": [],
+    "fluids": [],
+    "scene": ["classroom", "indoors"],
+    "lighting": ["day", "soft lighting", "warm tone"],
+    "composition": ["cowboy shot", "straight-on"],
+    "watermark": [],
+    "text": [],
+    "corrections": [],
+    "note": ""
+  }
+}

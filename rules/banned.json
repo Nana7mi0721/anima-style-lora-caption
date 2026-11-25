@@ -1,0 +1,61 @@
+{
+  "meta": [
+    "uncensored",
+    "highres",
+    "absurdres",
+    "lowres",
+    "photoshop",
+    "photoshop (medium)",
+    "digital version",
+    "artist revision",
+    "translated",
+    "detexted",
+    "wallpaper",
+    "commentary",
+    "commentary request",
+    "bad id",
+    "bad link",
+    "bad twitter id",
+    "bad pixiv id",
+    "twitter username",
+    "pixiv username",
+    "web address",
+    "url",
+    "sample watermark",
+    "third-party edit",
+    "watermark only",
+    "anno"
+  ],
+  "quality": [
+    "masterpiece",
+    "best quality",
+    "good quality",
+    "normal quality",
+    "worst quality",
+    "low quality",
+    "high quality",
+    "amazing quality",
+    "very aesthetic",
+    "absurdly detailed",
+    "detailed",
+    "detailed eyes",
+    "beautiful",
+    "aesthetic",
+    "very aroused"
+  ],
+  "text_family": [
+    "text",
+    "japanese text",
+    "english text",
+    "chinese text",
+    "korean text",
+    "chinese character",
+    "japanese character"
+  ],
+  "score_year_regex": [
+    "^score_\\d+(_up)?$",
+    "^score \\d+( up)?$",
+    "^year \\d{4}$",
+    "^(newest|recent|oldest)$"
+  ]
+}

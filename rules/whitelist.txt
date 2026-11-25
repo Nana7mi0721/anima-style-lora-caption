@@ -1,0 +1,39 @@
+# Non-Danbooru visual descriptors approved for style/caption learning.
+# Checked BEFORE character-prefix stripping so phrases like "bright indoor light" are preserved.
+
+# Lighting & tone
+warm tone
+cool tone
+soft lighting
+soft light
+bright lighting
+natural lighting
+warm lighting
+dim lighting
+cinematic lighting
+soft shadows
+side lighting
+strong light
+strong shadows
+hard shadow pattern
+low contrast
+cool-warm mixed
+bright indoor light
+sunlight from left
+sunlight through blinds
+soft body highlight
+pastel tone
+daylight
+moody lighting
+backlighting
+rim lighting
+
+# Composition
+diagonal composition
+multi-figure composition
+eye level
+foreground focus on hips
+
+# Watermark colors
+blue watermark
+red watermark

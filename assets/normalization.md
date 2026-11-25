@@ -1,187 +1,107 @@
-# 标签规范化与校验
+# 标签规范化与校验操作指南
 
-配套 SKILL.md §5、`assets/workflow.md` §5~§7。本文件是**可执行的对照表与操作方法**；背后的原则见 `references/Anima_style_LoRA_打标指南.md`。
+配套 [SKILL.md](../SKILL.md) §6 与 [workflow.md](workflow.md) §3~§5。本文件说明**规则如何使用、如何按数据集扩展，以及离线/在线校验标准**；背后的标签取舍原则见 [Anima_style_LoRA_打标指南.md](../references/Anima_style_LoRA_打标指南.md)。
 
 ---
 
-## 1. 归一化表（VISION_FIX）
+## 1. 规则单一事实源（`rules/`）
 
-视觉层与权威标签转换得到的 token **都要**过这张表。合并阶段自动生效，**不要靠提示词去约束子代理**（子代理只管如实描述，规范形由合并层统一处理）。
+所有机器可执行规则统一维护在 `rules/` 目录，由 `scripts/common.py` 的 `load_rules()` 加载，**禁止在文档或脚本中手抄漂移副本**：
 
-### 1.1 别名 → 现行形
+| 文件 | 职责与关键内容 |
+|---|---|
+| `rules/vision_fix.json` | 含 `aliases`（如 `pantsu`→`panties`、`topless`→`breasts out`、`front view`→`straight-on`、`chinese dress`→`china dress`）、`multi_split`（如 `bikini_pull`→`["clothes pull", "one breast out"]`）、`deprecated_drop`（`areola`/`areolae`/`bangs`）、`semantic_traps`（语义陷阱警告）、`color_downgrade`（如 `light blue hair`→`blue hair`、`golden eyes`→`yellow eyes`） |
+| `rules/whitelist.txt` | 非 Danbooru 但对画风/构图可学的描写词白名单（每行一个小写短语，支持 `#` 注释），覆盖光影、构图与水印颜色词 |
+| `rules/parent_fold.json` | `parent_to_children`（有具体子标签时折叠泛化父标签，如 `cat ears`→删 `animal ears`）与 `generic_drop_on_modifier`（并存 `white dress` 时删 `dress`） |
+| `rules/banned.json` | `meta`、`quality`、`text_family`（已废弃的 `text`/`japanese text` 等整族）、`score_year_regex` |
+| `rules/neg_keep.txt` | 合法的 Danbooru `no *` 否定前缀白名单（如 `no panties`、`no bra`、`no humans`、`no pupils`、`no shoes`、`no socks` 等） |
+| `rules/slots.json` | `slot_order`（1~7）、`field_to_slot`（`POSE`→3、`WATERMARK`/`TEXT`→7）、`slot1_people`、`pose_tokens`、`composition_tokens`、`watermark_tokens`、`protected_tokens`、`trim_tiers`（1~4 级自动裁剪优先级）、`conflict_groups`、`conflict_exemptions` |
+| `rules/prompt_templates.json` | 按 `task_type` × `rating` 及缺口预设拼装的模块化提示词配置 |
 
-| 原词 | 现行形 | 说明 |
+### 1.1 容易踩坑的关键规则
+
+- **语义陷阱（必须显式核对）**：`cowgirl` 在 Danbooru 上有 active alias 指向 `cow girl`（牛仔女郎**服装**）。若语境为**性体位**，必须显式转为 `cowgirl position`，绝不能盲吃别名。一般原则：**吃 alias 前先确认语义**。
+- **白名单必须早于角色前缀剥离**：口语清洗会剥离 `<角色名> <特征>`（如 `kanne brown eyes` → `brown eyes`）。`normalize_token()` 会先放行 `whitelist` 再执行前缀剥离，避免 `bright indoor light` 这类多词描写被误切；同时保留 `:3`、`^_^` 等颜文字并拦截括号注释残片（如 `man behind)`）。
+- **父标签故意留白例外**：若刻意保留父标签（例如权威源具体种属不可靠，留给视觉层补全），需在 `tag_table.csv` 的 `note` 列注明原因，以免复查误判漏删。
+- **解析与合并共用规则**：修改 `rules/` 或白名单同时影响 `parse_descriptions.py` 与 `merge_captions.py`，改后务必**先重跑解析再重跑合并**。
+
+---
+
+## 2. 数据集级扩展（`wash_rules.json`）
+
+不污染全局 `rules/` 的前提下，可在工作目录放置数据集局部的 `wash_rules.json`，并通过 `--extra-rules <path>` 传给各脚本。`load_rules()` 的合并语义如下：
+
+| 字段 | 合并语义 | 用途示例 |
 |---|---|---|
-| `pantsu` | `panties` | 别名 |
-| `seifuku` | `serafuku` | 别名 |
-| `megane` | `glasses` | 别名 |
-| `naked` | `nude` | 别名 |
-| `topless` | `breasts out` | **已废弃无别名**，换具名等价标签（信息不可丢） |
-| `ass_grab` | `grabbing another's ass` | **已废弃无别名** |
-| `breast_grab` | `grabbing another's breast` | 别名 |
-| `breast_hold` | `grabbing own breast` | **已废弃无别名** |
-| `tan_lines` | `tanlines` | 别名 |
-| `bunny_ears` | `rabbit ears` | 别名 |
-| `swimsuits` | `swimsuit` | 别名 |
-| `bikini_top` | `bikini top only` | 别名 |
-| `semen` | `cum` | 已废弃 |
-| `bikini_pull` | `clothes pull` + `one breast out` | 已废弃，拆成两个现行标签 |
-| `nopan` | `no panties` | — |
-| `shimapan` | `striped panties` | — |
-| `smiling` | `smile` | 非 danbooru 词 |
-| `slender` | `skinny` | 视觉层实测 |
-| `group shot` | `group picture` | 视觉层实测 |
-| `on all fours` | `all fours` | 视觉层实测 |
-| `hair clip` | `hairclip` | 视觉层实测 |
-| `hairy arms` | `arm hair` | 视觉层实测 |
-| `reverse cowgirl` | `reverse cowgirl position` | 视觉层实测 |
-| `tights` | `pantyhose` | 词典有 pantyhose |
-| `sofa` | `couch` | 词典有 couch 无 sofa |
-| `indoor background` | `indoors` | — |
-| `outdoor background` | `outdoors` | — |
-| `low angle` | `from below` | — |
-| `high angle` | `from above` | — |
-| `thigh-highs` | `thighhighs` | — |
-| `hand on face` / `hand on cheek` | `hand on own face` / `hand on own cheek` | — |
-| `front view` / `back view` / `side view` | `straight-on` / `from behind` / `from side` | 前者 posts=0，**不存在** |
-| `looking away` | `looking to the side` | 已废弃 |
-
-### 1.2 废弃 → 删除（信息由别的标签承载）
-
-| 原词 | 处理 |
-|---|---|
-| `areola` / `areolae` | **删除**（两者均废弃且无别名），乳晕信息由 `nipples` 承载 |
-| `bangs` | **删除**（已废弃） |
-| `text` / `japanese text` / `english text` / `chinese text` | **整族不写**（已废弃），改由 `speech bubble` / `sound effects` / `logo` 承载 |
-
-### 1.3 语义陷阱（必须显式覆盖）
-
-| 原词 | 陷阱 | 处理 |
-|---|---|---|
-| `cowgirl` | 有 active alias 指向 `cow girl`（牛仔女郎**服装**） | 若语境是**体位**，必须写 `cowgirl position`，不能直接吃 alias |
-
-> 一般规则：**吃 alias 前先确认语义**。别名表只保证词形合法，不保证语义正确。
-
-### 1.4 颜色与复合形
-
-- **词典无的复合色降级为泛色**：`light blue hair`→`blue hair`、`silver hair`→`white hair`、`golden/amber eyes`→`yellow eyes`
-- **同图 ≥2 种发色** → 加 `multicolored hair`
-- **并存同类**（`dress` + `white dress`、`bow` + `blue bow`）→ **保留具体形，删泛形**
-
-### 1.5 折叠蕴含父标签
-
-有具体标签时删掉泛化父标签：有 `cat ears` 就删 `animal_ears`；有 `school swimsuit` 就删 `swimsuit`。
-
-> ⚠️ 例外：若父标签是**故意留白**的（例如让视觉层的具体种属字段独占，而权威标签的标注不可靠），要写进动作表 `note` 说明，否则复查时会当成漏删。
-
-### 1.6 否定式（两层防护，缺一不可）
-
-| 层 | 做法 |
-|---|---|
-| 提示词层 | 写明「看不到就写 `none`，不要写否定式」 |
-| 合并层兜底 | `^(no\|without\|not)\b` 一律丢弃 |
-
-⚠️ **例外必须保留**：`no panties` / `no bra` / `no panties` 这类**本身就是标签**的词，不能被否定式规则误杀。
-
-### 1.7 通用形改写兜底
-
-子代理会产出大量口语形或空标签，合并层需有通用改写：
-
-| 模式 | 处理 |
-|---|---|
-| `N girls X` | 规范为数字形 |
-| `X visible` / `X focus` | 按现行标签改写或丢弃 |
-| `slightly X` | 去掉程度副词 |
-| `close-up on …` | 改为 `close-up` |
-| `X background` | 改为 `indoors` / `outdoors` 或具体标签 |
-| `<角色名前缀> <特征>`（如 `kanne brown eyes`） | **剥离角色名前缀** → `brown eyes` |
-
-> ⚠️ 角色名前缀剥离会误伤白名单描写词（实测 `bright indoor light` 被剥成 `indoors`）。**白名单词必须在剥离规则之前提前放行。**
+| `aliases` | `dict.update()`（局部覆盖/追加全局） | 数据集专属错别字或特定词形映射 |
+| `drop_exact` | 集合并集（`union`） | 仅在本数据集清除的特定噪声/高频干扰词 |
+| `whitelist` | 集合并集（`union`） | 特定画风/场景才需要的额外白名单描写词 |
+| `neg_keep` | 集合并集（`union`） | 数据集新增的合法 `no *` Danbooru 标签 |
+| `drop_regex` | 列表追加（`append`） | 数据集专属的正则过滤规则 |
 
 ---
 
-## 2. 描写词白名单
+## 3. 否定式双层防护（升级版）
 
-danbooru 没有对应的光影/构图标签，但**对画风 LoRA 是可学的视觉信号**，需登记放行，否则会被判为「未知标签」或误伤。
+自动打标或看图子代理常输出 `no cum`、`tongue not out`、`no penetration`、`without clothing` 等「反向标签」。防护分两层：
 
-**收录标准**：语义明确、可复现、不与已有词高度重复。**纯散文句一律丢弃**（如 `looking at the scene`、`two girls arranged horizontally in frame`）。
-
-**光影类**：
-
-```
-warm tone          cool tone           soft lighting
-soft light         bright lighting     natural lighting
-warm lighting      dim lighting        cinematic lighting
-soft shadows       side lighting       strong light
-strong shadows     hard shadow pattern low contrast
-cool-warm mixed    bright indoor light sunlight from left
-sunlight through blinds                 soft body highlight
-```
-
-**构图类**：
-
-```
-diagonal composition   multi-figure composition
-eye level              foreground focus on hips
-```
-
-**水印颜色词**：`blue watermark` / `red watermark`
-
-⚠️ **白名单是解析与合并两层共用的**。改白名单后**必须先重跑解析再合并**，否则词在解析阶段就已被丢弃。
+1. **提示词层**：要求看不到的元素输出 `[]` / `none`，禁止写否定式。
+2. **解析/合并层兜底**：匹配 `^(no|without|not)\b` 的 token 默认丢弃——**但在丢弃前强制核对双保险**：
+   - 先查 `rules/neg_keep.txt`（已收编 `no panties`、`no bra`、`no humans`、`no pupils`、`no shoes` 等 24+ 合法 Danbooru 标签）；
+   - 若提供了词典缓存/在线集合 `valid_dict`，再查 `to_danbooru_key(tag) in valid_dict`。命中任一即放行，确保 `no humans`/`no pupils`/`no shoes` 不再被误杀。
 
 ---
 
-## 3. 词典与在线校验
+## 4. 标签计数口径、冲突检测与 3 条豁免
 
-### 3.1 词典准备
+### 4.1 标签计数口径
 
-| 项 | 要求 |
-|---|---|
-| 来源 | 从 danbooru API 拉取 tag 表（含 `name` / `category` / `post_count` / `is_deprecated`） |
-| 🔴 排序参数 | **必须按使用量降序**。默认按 id 倒序（最新标签在前），会一路抓刚创建的长尾标签，**抓几十万行也抓不到 `nude` / `1girl` 这类高频标签**（已实测踩过） |
-| 规模参考 | 按使用量降序抓取，几十万行即可覆盖全部常用标签 |
-| 废弃标记 | `is_deprecated=1` 必须拦下，改用现行形 |
-| 用途 | **只当离线缓存**；真正的闸门是在线批量查询 |
+**所有脚本与报告的标签数统计（推荐区间 20~45、`--min-tags`、`--max-tags`）一律严格排除首位 `@trigger`。** 例如 `@myartist, 1girl, solo` 计为 2 个标签，不再出现 off-by-one 偏差。
 
-### 3.2 校验形态
+### 4.2 冲突检测与 3 条强制豁免
 
-| 校验 | 用哪种形态 | 原因 |
-|---|---|---|
-| 词典比对 | **下划线原形** | 词典是下划线格式，实测空格形查不到 |
-| 写回产物 | 空格形（`score_*` 除外） | 与底模训练分布一致 |
-
-⇒ **先用原形校验，通过后再做空格化 / 目标模型转换。** 转换后的特殊标签（如带限定词的角色名、触发词）加进 `KNOWN_EXTRA` 白名单。
-
-### 3.3 在线批量查询
-
-- 接口：danbooru `search[name_comma]`
-- 批量：**每批 120 个**
-- 🔴 批量查 `tags.json` 时**必须带 `limit=len(批次)*2`**（`limit=0` 只回 1 条）
-- 分来源分层校验：词典只覆盖 booru 侧转换来的标签；**视觉层补的描写性标签**本来就不在词典内，只做宽松核对，不要一刀切判未知
-
-### 3.4 词典有洞是常态
-
-实测常见缺失：`teary eyes` / `shower` / `soft lighting` 等——它们可能是有效标签但不在抓取窗口内。处理方式：
-
-1. 先在线的 `search[name_comma]` 复核
-2. 仍查不到但确实在成品集里大量使用的 → 人工放行白名单
-3. 查不到且无先例 → 按未知处理（不要放行自造词）
+`scripts/validate_captions.py` 在 Gate 1 检查两类冲突：
+1. **人数互斥**：`solo` 与 `solo focus` 互斥；`solo` 与 `1boy`/`2girls`/`3girls`/`multiple girls`/`multiple boys`/`hetero`/`yuri`/`group sex` 等多人/关系词互斥。
+2. **同属性多值冲突**（`rules/slots.json` `conflict_groups`：`hair_color`、`eye_color`、`hair_length`），且强制执行以下 **3 条豁免**（`conflict_exemptions`）：
+   - **豁免 1（多人图豁免）**：若 caption 含多人标签（`2girls`、`1girl`+`1boy`、`multiple girls` 等），跳过 `hair_color`、`eye_color`、`hair_length` 冲突检测（不同角色自然拥有不同发型发色）。
+   - **豁免 2（多色/异色瞳豁免）**：含 `multicolored hair` / `two-tone hair` / `gradient hair` / `colored inner hair` 时豁免 `hair_color` 冲突；含 `heterochromia` / `gradient eyes` 时豁免 `eye_color` 冲突。
+   - **豁免 3（`no panties` ≠ `no bra`）**：两者描写部位完全独立，**永远不列入同一互斥冲突组**。
 
 ---
 
-## 4. 专项断言（写进校验脚本）
+## 5. 词典准备与 3 态在线校验
 
-```
-□ 触发词置首，且 @ 只出现在首位触发词
-□ 单行、全小写、无重复 token、无前导逗号、无尾标点
-□ BANNED 令牌零残留：画师标签 / IP 系列名 / 低频角色名 / meta 常量
-□ 否定式 token 零残留
-□ 质量词 0
-□ 文字族 0（text / japanese text / english text / chinese text）
-□ 人数一致性冲突 0（solo 与 solo focus 互斥）
-□ 水印区与视觉台账逐张一致
-□ 图-txt 配对 N 对完整
-□ 近重复对逐对一致性
-```
+### 5.1 离线词典与形态转换
 
-> 「水印区与台账一致」而非「每张必含 watermark」：水印是否恒定必须由视觉实测决定，**不要写成恒定断言**——实测出现过「计划按 N/N 必写，实际只有大部分图有水印」的情况。
+- **拉取排序**：从 Danbooru API 拉取离线词典时**必须按使用量降序**（`search[order]=count`）。默认按 id 倒序会抓到海量新建长尾词，几十万行也覆盖不到 `nude`/`1girl`。
+- **双形态分离**：
+  - **校验态**：使用 `to_danbooru_key()` 转为**下划线原形**（去转义括号 `\\(`），否则词典命中失败；
+  - **落盘态**：使用 `norm_key()` 转为**空格小写**（仅 `score_*` 保留下划线），与 Anima 训练分布一致。
+
+### 5.2 在线批量校验、SQLite 缓存与 3 态输出
+
+`scripts/validate_captions.py --online` 调用 `https://danbooru.donmai.us/tags.json`：
+- 参数：`search[name_comma]`（**逗号拼接**，非空格）、每批 `120` 个、`limit = len(batch) * 2`（防止 `limit=0` 只返回 1 条）。跳过 `@trigger`、whitelist 描写词与合法转义角色名。
+- 支持 `--proxy <url>`、必要时 `--use-curl`（走 `curl -x`）以及 `--auth user:key`（或环境变量 `DANBOORU_LOGIN` / `DANBOORU_API_KEY`）。
+- **持久化 SQLite 缓存（`--cache danbooru_cache.sqlite`）**：已确认查询按 TTL（如 30 天）落盘，复跑直接命中缓存，避免重复请求。
+- **严格 3 态判定**：
+  - `VALID`：`post_count > 0` 且 `is_deprecated == false`
+  - `INVALID`：网络正常返回且确认 `post_count == 0` 或 `is_deprecated == true`
+  - `UNVERIFIED`：网络/HTTP/代理异常且重试耗尽——**绝不降级为 `ABSENT`/`INVALID`**。`--strict` 模式与 `apply_captions.py` 默认都会因 `UNVERIFIED > 0` 阻断写回。
+- **别名自动建议（`--suggest-aliases`）**：对 `INVALID` 标签批量查 `tag_aliases.json`（`search[antecedent_name]`、`search[status]=active`）给出替换建议；若命中 `rules/vision_fix.json` 的 `semantic_traps`（如 `cowgirl`），显式标红提醒人工审阅，禁止盲目替换。
+
+---
+
+## 6. 离线 Gate 1 完整断言清单
+
+- [ ] 图-txt 1:1 配对完整（无漏无多余）
+- [ ] 单行、**UTF-8 无 BOM**、**无末尾换行符**
+- [ ] 无前导逗号、无尾标点、半角 `, ` 分隔
+- [ ] 全小写空格形（`score_*` 例外）、无重复 token
+- [ ] `@trigger` 置首，且 `@` 仅出现在首位（除非明确登记）
+- [ ] 标签数（**不含 `@trigger`**）落在目标区间（默认 20~45）
+- [ ] `BANNED` 零残留（画师/社团/IP 系列/meta/质量词/`text` 族/`score_*`/`year_*`）
+- [ ] 非法否定式零残留（`neg_keep.txt` 与词典合法词除外）
+- [ ] 人数冲突 0，且属性冲突检查已应用 3 条强制豁免
+- [ ] 水印区（Slot 7）与视觉台账/补充结果逐张一致（不作恒定存在假设）
+- [ ] 近重复/差分对标签保持一致性
